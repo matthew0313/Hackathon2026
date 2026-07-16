@@ -21,8 +21,8 @@ public class Hammer : MonoBehaviour
     [SerializeField] float minCamImpulse, maxCamImpulse;
 
     [Header("Sound")]
-    [SerializeField] AudioClip wallHitSound;
-    [SerializeField] AudioClip enemyHitSound;
+    [SerializeField] Sound wallHitSound;
+    [SerializeField] Sound enemyHitSound;
 
     public bool isEnabled = true;
 
