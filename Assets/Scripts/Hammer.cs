@@ -23,8 +23,6 @@ public class Hammer : MonoBehaviour
         if (target == null) return;
         if (hammerHead == null) return;
 
-        // Sum every contact: a face landing flat-on reports several, and the solver splits the
-        // impulse between them. Reading only the first would under-read the hardest blows.
         float impulse = 0f;
         for (int i = 0; i < collision.contactCount; i++) impulse += collision.GetContact(i).normalImpulse;
         if (impulse < minImpulse) return;
@@ -37,12 +35,6 @@ public class Hammer : MonoBehaviour
         target.CarveHammerBlow(hit.point, strike, FaceWidth(strike), Mathf.Lerp(minDepth, maxDepth, force));
         Debug.Log("EE");
     }
-
-    /// <summary>
-    /// The head's silhouette width as seen along the strike -- its actual contact patch, whichever way
-    /// the head happens to be turned. Saves having to declare which of the box's axes is "the face",
-    /// and means a corner-on hit correctly bites narrower than a flat-on one.
-    /// </summary>
     float FaceWidth(Vector2 strike)
     {
         Vector2 across = new Vector2(-strike.y, strike.x);

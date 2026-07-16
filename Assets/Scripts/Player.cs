@@ -19,7 +19,7 @@ public class Player : MonoBehaviour
     [Tooltip("How hard the head chases the cursor. Its reciprocal is roughly the seconds it takes to " +
              "close most of the gap, so 10 = about a tenth of a second when nothing is in the way.")]
     [SerializeField] float followSpeed = 10.0f;
-    [SerializeField] float hammerMoveTime = 0.3f;
+    [SerializeField] float lerpSpeed = 10.0f;
     Rigidbody2D rb;
 
     void Awake()
@@ -44,6 +44,15 @@ public class Player : MonoBehaviour
         Vector2 dir = hammer.transform.up;
         float targetAngle = Mathf.Atan2(targetDir.y, targetDir.x) * Mathf.Rad2Deg;
         float angleDiff = Mathf.DeltaAngle(Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg, targetAngle);
-        hammer.rb.angularVelocity = angleDiff;
+        if (Input.GetMouseButton(0))
+        {
+            hammer.rb.simulated = false;
+            hammer.transform.rotation = Quaternion.Slerp(hammer.transform.rotation, Quaternion.Euler(0, 0, targetAngle - 90.0f), lerpSpeed * Time.deltaTime);
+        }
+        else
+        {
+            hammer.rb.simulated = true;
+            hammer.rb.angularVelocity = angleDiff * followSpeed;
+        }
     }
 }
