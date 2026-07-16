@@ -798,7 +798,7 @@ GameObject:
   - component: {fileID: 800789229}
   m_Layer: 0
   m_Name: Player
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -818,12 +818,6 @@ MonoBehaviour:
   moveSpeed: 4
   hammer: {fileID: 1465305475}
   followSpeed: 10
-  <maxStamina>k__BackingField: 100
-  <staminaLowerThreshold>k__BackingField: 20
-  <stamina>k__BackingField: 0
-  staminaDepleteRate: 0.1
-  staminaRegen: 20
-  lowStaminaSpeed: 0
 --- !u!50 &800789230
 Rigidbody2D:
   serializedVersion: 5
@@ -1054,6 +1048,8 @@ MonoBehaviour:
   maxImpulse: 6
   minDepth: 0.02
   maxDepth: 0.5
+  bounciness: 0.35
+  recoilTime: 0.5
 --- !u!233 &1465305476
 HingeJoint2D:
   m_ObjectHideFlags: 0
