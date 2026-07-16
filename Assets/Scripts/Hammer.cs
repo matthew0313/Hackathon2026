@@ -12,13 +12,17 @@ public class Hammer : MonoBehaviour
     [Header("Blow")]
     [SerializeField] float minImpulse = 0.5f;
     [SerializeField] float maxImpulse = 6f;
-    [SerializeField] float minDepth = 0.02f;
-    [SerializeField] float maxDepth = 0.5f;
+    public float minDepth = 0.02f;
+    public float maxDepth = 0.5f;
     [SerializeField] float minDamage = 10.0f, maxDamage = 30.0f;
 
     [Header("Camera Impulse")]
     [SerializeField] CinemachineImpulseSource impulseSource;
     [SerializeField] float minCamImpulse, maxCamImpulse;
+
+    [Header("Sound")]
+    [SerializeField] AudioClip wallHitSound;
+    [SerializeField] AudioClip enemyHitSound;
 
     public bool isEnabled = true;
 
@@ -45,8 +49,10 @@ public class Hammer : MonoBehaviour
             Vector2 strike = -hit.normal;
 
             target.CarveHammerBlow(hit.point, strike, FaceWidth(strike), Mathf.Lerp(minDepth, maxDepth, force));
-
+            
             impulseSource.GenerateImpulse(strike * Mathf.Lerp(minCamImpulse, maxCamImpulse, force));
+            if (target.CompareTag("Wall")) AudioManager.Instance.PlaySound(wallHitSound);
+            if (target.CompareTag("Enemy")) AudioManager.Instance.PlaySound(enemyHitSound);
         }
         if(collision.transform.TryGetComponent(out IDamagable damagable))
         {
