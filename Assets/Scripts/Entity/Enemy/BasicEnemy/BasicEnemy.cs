@@ -241,14 +241,7 @@ namespace BasicEnemy
                             GameObject hitObject = i.transform.gameObject;
                             if (hitList.Contains(hitObject)) continue; hitList.Add(hitObject);
 
-                            if (hitObject.TryGetComponent(out IDamagable damagable))
-                            {
-                                damagable.GetDamage(new DamageInfo()
-                                {
-                                    amount = origin.attackDamage,
-                                    damageSource = origin
-                                });
-                            }
+                            if (hitObject == origin.player.gameObject) origin.player.GetDamage(1);
                         }
                         yield return Timing.WaitForSeconds(origin.attackEndlag);
                         parentLayer.ChangeState("Chasing");

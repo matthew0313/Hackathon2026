@@ -20,7 +20,7 @@ public class EnemySpawner : Enemy
         topLayer = new(this);
         topLayer.OnStateEnter();
     }
-    bool dead = false;
+    public bool dead { get; private set; } = false;
     private void Update()
     {
         topLayer.OnStateUpdate();

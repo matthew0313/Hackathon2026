@@ -1,5 +1,7 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Rigidbody2D))]
 public class Player : Entity
@@ -16,14 +18,32 @@ public class Player : Entity
     //[field:SerializeField] public float stamina { get; private set; }
     //[SerializeField] float staminaDepleteRate = 0.1f, staminaRegen = 10.0f;
     [SerializeField] float recoilTime = 0.3f;
+    [field:SerializeField] public int maxHp { get; private set; } = 3;
+    public int hp = 3;
+    public event Action onHpChange;
+    public event Action<int> onDamage;
+    public Rigidbody2D rb { get; private set; }
 
-    int hp = 5;
-    Rigidbody2D rb;
-
+    bool dead = false;
+    public void GetDamage(int damage)
+    {
+        if (dead) return;
+        hp = Mathf.Max(0, hp - damage);
+        onDamage?.Invoke(damage);
+        onHpChange?.Invoke();
+        if(hp <= 0)
+        {
+            rb.simulated = false;
+            dead = true;
+            enabled = false;
+            GameManager.Instance.GameOver();
+        }
+    }
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         mainCam = Camera.main;
+        hp = maxHp;
         //stamina = maxStamina;
     }
     private void Update()
