@@ -14,5 +14,6 @@ public class PlayerCam : MonoBehaviour
     private void LateUpdate()
     {
         transform.position = Vector2.Lerp(transform.position, player.transform.position, lerpRate * Time.deltaTime);
+        transform.position += new Vector3(0, 0, -10.0f);
     }
 }
