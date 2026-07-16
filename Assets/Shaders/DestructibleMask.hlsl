@@ -14,16 +14,20 @@ TEXTURE2D(_DamageMask);
 SAMPLER(sampler_DamageMask);
 
 // Multiplies the damage mask into c.a and tints surviving edges next to carved texels.
-// uv is the sprite's texture UV; the mask covers only this sprite's sub-rect of that texture.
+// uv is whatever coordinate _MaskRect is expressed in -- the sprite shader passes texture UVs
+// with _MaskRect as the sprite's atlas sub-rect, the tilemap shader passes local position with
+// _MaskRect as the mask's local-space footprint. The remap below is the same either way.
 half4 ApplyDamage(half4 c, float2 uv)
 {
     float2 maskUV = (uv - _MaskRect.xy) / _MaskRect.zw;
     half m = SAMPLE_TEXTURE2D(_DamageMask, sampler_DamageMask, maskUV).r;
     c.a *= m;
 
-    // The mask is binary and point-filtered, so there is no gradient to smoothstep across. Detect the
-    // edge with taps instead: "this texel survived but a neighbour did not". Clamp wrapping means taps
-    // off the sprite read as intact, so the outer silhouette never gets a rim.
+    // The mask data is binary; bilinear filtering stretches each carved edge into a one-texel
+    // gradient that antialiases the cut (and already faded c.a above). The rim is still found with
+    // taps -- "this texel survived but a neighbour did not" -- now easing in over that same
+    // gradient rather than switching on per texel. Clamp wrapping means taps off the sprite read
+    // as intact, so the outer silhouette never gets a rim.
     if (_RimTexels > 0.0h && m > 0.5h)
     {
         float2 o = _MaskTexelSize.xy * _RimTexels;
