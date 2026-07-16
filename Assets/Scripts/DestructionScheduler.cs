@@ -3,7 +3,7 @@ using System.Diagnostics;
 using UnityEngine;
 
 /// <summary>
-/// Batches the expensive half of destruction across every <see cref="DestructibleSprite"/>
+/// Batches the expensive half of destruction across every <see cref="DestructibleSurface"/>
 /// in the scene.
 ///
 /// Mask uploads are cheap and happen for every dirty object each frame, so the visual
@@ -23,7 +23,7 @@ public class DestructionScheduler : MonoBehaviour
     static DestructionScheduler instance;
     static bool quitting;
 
-    readonly List<DestructibleSprite> pending = new List<DestructibleSprite>();
+    readonly List<DestructibleSurface> pending = new List<DestructibleSurface>();
     readonly Stopwatch stopwatch = new Stopwatch();
     int cursor;
 
@@ -35,7 +35,7 @@ public class DestructionScheduler : MonoBehaviour
         quitting = false;
     }
 
-    public static void Enqueue(DestructibleSprite d)
+    public static void Enqueue(DestructibleSurface d)
     {
         if (d == null || d.Queued || quitting) return;
 

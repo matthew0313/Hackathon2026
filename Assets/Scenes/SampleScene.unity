@@ -615,15 +615,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f20a57f36a151d345875ba38a3ade558, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DestructibleSprite
-  maskDownscale: 1
   chunkTexels: 64
   alphaThreshold: 0.5
   impactRoughness: 0.34
   spallChips: 3
+  fractureCracks: 3
+  edgeSmoothing: 2
+  maxLooseFragment: 24
   debris: {fileID: 0}
   debrisPerUnitArea: 60
   maxDebrisPerHit: 24
   tintDebrisFromSprite: 1
+  maskDownscale: 1
 --- !u!212 &598862730
 SpriteRenderer:
   serializedVersion: 2
@@ -814,8 +817,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Player
   moveSpeed: 4
   hammer: {fileID: 1465305475}
-  followSpeed: 50
-  hammerMoveTime: 0.1
+  followSpeed: 10
+  <maxStamina>k__BackingField: 100
+  <staminaLowerThreshold>k__BackingField: 20
+  <stamina>k__BackingField: 0
+  staminaDepleteRate: 0.1
+  staminaRegen: 20
+  lowStaminaSpeed: 0
 --- !u!50 &800789230
 Rigidbody2D:
   serializedVersion: 5
@@ -1045,7 +1053,7 @@ MonoBehaviour:
   minImpulse: 0.5
   maxImpulse: 6
   minDepth: 0.02
-  maxDepth: 0.09
+  maxDepth: 0.5
 --- !u!233 &1465305476
 HingeJoint2D:
   m_ObjectHideFlags: 0

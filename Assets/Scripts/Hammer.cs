@@ -1,30 +1,32 @@
 using UnityEngine;
-[RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(Rigidbody2D), typeof(HingeJoint2D))]
 public class Hammer : MonoBehaviour
 {
     [SerializeField] BoxCollider2D hammerHead;
 
+    Player player;
     public Rigidbody2D rb { get; private set; }
+    public HingeJoint2D joint { get; private set; }
 
     [Header("Blow")]
     [SerializeField] float minImpulse = 0.5f;
     [SerializeField] float maxImpulse = 6f;
     [SerializeField] float minDepth = 0.02f;
-    [SerializeField] float maxDepth = 0.09f;
+    [SerializeField] float maxDepth = 0.5f;
 
     private void Awake()
     {
+        player = GameObject.FindGameObjectWithTag("Player").GetComponent<Player>();
         rb = GetComponent<Rigidbody2D>();
+        joint = GetComponent<HingeJoint2D>();
     }
 
     void OnCollisionEnter2D(Collision2D collision)
     {
-        var target = collision.collider.GetComponent<DestructibleSprite>();
+        var target = collision.collider.GetComponent<DestructibleSurface>();
         if (target == null) return;
         if (hammerHead == null) return;
 
-        // Sum every contact: a face landing flat-on reports several, and the solver splits the
-        // impulse between them. Reading only the first would under-read the hardest blows.
         float impulse = 0f;
         for (int i = 0; i < collision.contactCount; i++) impulse += collision.GetContact(i).normalImpulse;
         if (impulse < minImpulse) return;
@@ -37,12 +39,6 @@ public class Hammer : MonoBehaviour
         target.CarveHammerBlow(hit.point, strike, FaceWidth(strike), Mathf.Lerp(minDepth, maxDepth, force));
         Debug.Log("EE");
     }
-
-    /// <summary>
-    /// The head's silhouette width as seen along the strike -- its actual contact patch, whichever way
-    /// the head happens to be turned. Saves having to declare which of the box's axes is "the face",
-    /// and means a corner-on hit correctly bites narrower than a flat-on one.
-    /// </summary>
     float FaceWidth(Vector2 strike)
     {
         Vector2 across = new Vector2(-strike.y, strike.x);

@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Hold left mouse button to carve holes in any DestructibleSprite under the cursor.
+/// Hold left mouse button to carve holes in any DestructibleSurface under the cursor.
 /// Throwaway harness for eyeballing the effect -- not meant to ship.
 /// </summary>
 public class DestructibleTester : MonoBehaviour
@@ -36,7 +36,7 @@ public class DestructibleTester : MonoBehaviour
         int count = Physics2D.OverlapCircle(p, radius, filter, hits);
         for (int i = 0; i < count; i++)
         {
-            var d = hits[i].GetComponent<DestructibleSprite>();
+            var d = hits[i].GetComponent<DestructibleSurface>();
             if (d != null) d.Carve(p, radius);
         }
     }
