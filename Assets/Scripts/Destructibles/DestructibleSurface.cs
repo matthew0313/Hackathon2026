@@ -24,6 +24,13 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public abstract class DestructibleSurface : MonoBehaviour
 {
+    [Header("State")]
+    [Tooltip("Can this surface currently be carved? While false, blows still collide but remove nothing.")]
+    public bool canBreak = true;
+
+    [Tooltip("Whether the surface's colliders start on. Toggle at runtime via collisionEnabled.")]
+    [SerializeField] bool collision = true;
+
     [Header("Collision")]
     [Tooltip("Mask texels per chunk edge. Each chunk owns one PolygonCollider2D and re-meshes independently. " +
              "Smaller = cheaper individual rebuilds, but more colliders on the object.")]
@@ -108,6 +115,35 @@ public abstract class DestructibleSurface : MonoBehaviour
     protected Color debrisTint = Color.white;
     float worldTexelArea;
 
+    // Solid texels at build time vs now, for intactPercentage. Purely visual carving (already
+    // transparent art) never touches these, matching what the player perceives as "material".
+    int initialSolid;
+    int remainingSolid;
+
+    /// <summary>
+    /// How much of the surface's original material is still standing, 0..100.
+    /// 100 = untouched, 0 = every last solid texel carved away.
+    /// </summary>
+    public float intactPercentage => initialSolid == 0 ? 0f : 100f * remainingSolid / initialSolid;
+
+    /// <summary>
+    /// Turns the surface's collision on and off as one. Carved-empty chunks stay dark when
+    /// re-enabling; everything else keeps meshing in the background either way, so toggling
+    /// is O(chunks) with no rebuild cost.
+    /// </summary>
+    public bool collisionEnabled
+    {
+        get => collision;
+        set
+        {
+            if (collision == value) return;
+            collision = value;
+            if (chunkColliders == null) return;   // before Awake; BuildColliders will apply it
+            for (int i = 0; i < chunkColliders.Length; i++)
+                chunkColliders[i].enabled = value && chunkSolid[i] > 0;
+        }
+    }
+
     internal bool Queued { get; set; }
     internal bool HasPendingColliderWork => dirtyChunks.Count > 0;
 
@@ -163,6 +199,8 @@ public abstract class DestructibleSurface : MonoBehaviour
         if (solid[i]) return;
         solid[i] = true;
         chunkSolid[ChunkOf(x, y)]++;
+        initialSolid++;
+        remainingSolid++;
     }
 
     /// <summary>
@@ -219,7 +257,7 @@ public abstract class DestructibleSurface : MonoBehaviour
     /// </summary>
     public void Carve(Vector3 worldPos, float worldRadius)
     {
-        if (!enabled || mask == null) return;
+        if (!enabled || !canBreak || mask == null) return;
 
         Vector2 c = WorldToTexel(worldPos);
         float rt = ToTexels(worldRadius);
@@ -246,7 +284,7 @@ public abstract class DestructibleSurface : MonoBehaviour
     /// from the impact force.</param>
     public void CarveHammerBlow(Vector3 worldContact, Vector2 worldStrikeDir, float worldFaceWidth, float worldDepth)
     {
-        if (!enabled || mask == null) return;
+        if (!enabled || !canBreak || mask == null) return;
         if (worldFaceWidth <= 0f || worldDepth <= 0f) return;
 
         Vector2 dir = transform.InverseTransformDirection(worldStrikeDir);
@@ -466,6 +504,7 @@ public abstract class DestructibleSurface : MonoBehaviour
         if (!solid[i]) return;
 
         solid[i] = false;
+        remainingSolid--;
         tally.removed++;
         tally.Grow(x, y);
         int chunk = ChunkOf(x, y);
@@ -736,7 +775,7 @@ public abstract class DestructibleSurface : MonoBehaviour
             pathBuffer.Add(new Vector2(min.x, max.y));
             col.SetPath(i, pathBuffer);
         }
-        col.enabled = true;   // chunkSolid > 0, so the mesh above always yields at least one rect
+        col.enabled = collision;   // chunkSolid > 0, so the mesh above always yields at least one rect
     }
 
     Vector2 TexelCornerToLocal(int tx, int ty)
