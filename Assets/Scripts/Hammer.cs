@@ -1,3 +1,4 @@
+using Unity.Cinemachine;
 using UnityEngine;
 [RequireComponent(typeof(Rigidbody2D), typeof(HingeJoint2D))]
 public class Hammer : MonoBehaviour
@@ -14,6 +15,10 @@ public class Hammer : MonoBehaviour
     [SerializeField] float minDepth = 0.02f;
     [SerializeField] float maxDepth = 0.5f;
     [SerializeField] float minDamage = 10.0f, maxDamage = 30.0f;
+
+    [Header("Camera Impulse")]
+    [SerializeField] CinemachineImpulseSource impulseSource;
+    [SerializeField] float minCamImpulse, maxCamImpulse;
 
     public bool isEnabled = true;
 
@@ -40,6 +45,8 @@ public class Hammer : MonoBehaviour
             Vector2 strike = -hit.normal;
 
             target.CarveHammerBlow(hit.point, strike, FaceWidth(strike), Mathf.Lerp(minDepth, maxDepth, force));
+
+            impulseSource.GenerateImpulse(strike * Mathf.Lerp(minCamImpulse, maxCamImpulse, force));
         }
         if(collision.transform.TryGetComponent(out IDamagable damagable))
         {

@@ -147,6 +147,12 @@ public abstract class DestructibleSurface : MonoBehaviour
     internal bool Queued { get; set; }
     internal bool HasPendingColliderWork => dirtyChunks.Count > 0;
 
+    // For ShadowShape2DProvider_Destructible: the chunk colliders are the exact silhouette of the
+    // surviving art, so 2D shadows are built straight from their paths. The version bumps whenever
+    // any chunk re-meshes, so shadow geometry only rebuilds when a carve actually moved collision.
+    internal int ColliderShapeVersion { get; private set; }
+    internal PolygonCollider2D[] ChunkColliders => chunkColliders;
+
     void Awake()
     {
         if (!BuildShape())
@@ -210,6 +216,14 @@ public abstract class DestructibleSurface : MonoBehaviour
     /// </summary>
     protected void FinishShape(Renderer renderer, Vector4 maskRect)
     {
+        // The mask is bound per-renderer, so a wrong material fails silently: colliders carve
+        // fine while the art never changes. Catch that here instead.
+        Material sharedMat = renderer.sharedMaterial;
+        if (sharedMat == null || !sharedMat.HasProperty(MaskId))
+            Debug.LogError(
+                $"{name}: the renderer's material ('{(sharedMat == null ? "none" : sharedMat.name)}') has no " +
+                "_DamageMask property, so carves will not show. Assign a material using one of the " +
+                "Custom/Destructible shaders.", this);
         // linear: this is a mask, not colour -- it must not go through sRGB conversion.
         // Bilinear: the mask data itself stays binary; the filtering is what antialiases carved
         // edges, ramping alpha across one texel instead of stair-stepping texel by texel.
@@ -698,6 +712,7 @@ public abstract class DestructibleSurface : MonoBehaviour
     /// </summary>
     void RebuildChunk(int chunk)
     {
+        ColliderShapeVersion++;
         var col = chunkColliders[chunk];
         if (chunkSolid[chunk] == 0)
         {
