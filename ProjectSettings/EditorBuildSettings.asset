@@ -11,5 +11,11 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Map.unity
     guid: db3399b11ac61ba439e9f734722f15b9
+  - enabled: 1
+    path: Assets/Scenes/Clear.unity
+    guid: 8c12c1adb4d12d84b914ed180be3f085
+  - enabled: 1
+    path: Assets/Scenes/Game_Over.unity
+    guid: 5b65ea066d596a348bf0995f6b97a020
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
