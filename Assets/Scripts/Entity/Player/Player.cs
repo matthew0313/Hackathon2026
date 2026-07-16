@@ -17,6 +17,7 @@ public class Player : Entity
     //[SerializeField] float staminaDepleteRate = 0.1f, staminaRegen = 10.0f;
     [SerializeField] float recoilTime = 0.3f;
 
+    int hp = 5;
     Rigidbody2D rb;
 
     void Awake()

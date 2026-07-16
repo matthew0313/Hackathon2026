@@ -40,11 +40,11 @@ namespace BasicEnemy
         Rigidbody2D rb;
         Player player;
         internal TopLayer topLayer;
-        readonly int fullHp = Animator.StringToHash("FullHp");
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
             agent.updateUpAxis = false;
+            agent.updateRotation = false;
             player = GameObject.FindGameObjectWithTag("Player").GetComponent<Player>();
             topLayer = new(this);
             topLayer.OnStateEnter();
@@ -176,11 +176,6 @@ namespace BasicEnemy
                     AddState("Attacking", new Attacking(origin, this));
                 }
                 float counter = 0.0f;
-                public override void OnStateEnter()
-                {
-                    base.OnStateEnter();
-                    origin.agent.enabled = false;
-                }
                 public override void OnStateUpdate()
                 {
                     base.OnStateUpdate();
