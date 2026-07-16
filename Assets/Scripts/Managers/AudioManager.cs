@@ -1,6 +1,5 @@
-using System.Net.Http;
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
 /// Single place the game reads input from, so nothing else has to care where it comes from.
@@ -16,16 +15,29 @@ public class AudioManager : MonoBehaviour
         Instance = Instantiate(Resources.Load<AudioManager>("AudioManager"));
         DontDestroyOnLoad(Instance.gameObject);
     }
+    readonly List<AudioSource> sources = new();
     Pooler<AudioSource> audioSourcePool;
     private void Awake()
     {
         audioSourcePool = new(() => new GameObject().AddComponent<AudioSource>());
+    }
+    private void Update()
+    {
+        for(int i = 0; i < sources.Count; i++)
+        {
+            if (!sources[i].isPlaying)
+            {
+                audioSourcePool.ReleaseObject(sources[i]);
+                sources.RemoveAt(i--);
+            }
+        }
     }
     public AudioSource PlaySound(Sound sound)
     {
         var source = audioSourcePool.GetObject();
         sound.PasteTo(source);
         source.Play();
+        sources.Add(source);
         return source;
     }
 }

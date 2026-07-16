@@ -1,6 +1,7 @@
 using MEC;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace BasicEnemy
 {
@@ -8,11 +9,14 @@ namespace BasicEnemy
     public class BasicEnemy : Entity
     {
         [SerializeField] DestructibleSprite sprite;
+        [SerializeField] NavMeshAgent agent;
         [SerializeField] float deadPrecentage = 30.0f;
 
         [SerializeField] float detectRange = 10.0f;
         [SerializeField] float detectTime = 1.0f, unDetectTime = 3.0f;
         [SerializeField] LayerMask detectionBlockMask;
+
+        [SerializeField] float roamingCooldown = 5.0f;
 
         [SerializeField] float chaseDist = 1.5f;
         [SerializeField] float backstepDist = 1.0f;
@@ -69,10 +73,19 @@ namespace BasicEnemy
                 AddState("Detected", new Detected(origin, this));
                 AddState("Dead", new Dead(origin, this));
             }
-            class Idle : State<BasicEnemy>
+            class Idle : Layer<BasicEnemy>
             {
-                public Idle(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent) { }
+                public Idle(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent)
+                {
+                    defaultState = new Waiting(origin, this);
+                    AddState("Waiting", defaultState);
+                }
                 float counter = 0.0f;
+                public override void OnStateEnter()
+                {
+                    base.OnStateEnter();
+                    origin.agent.enabled = true;
+                }
                 public override void OnStateUpdate()
                 {
                     base.OnStateUpdate();
@@ -80,6 +93,28 @@ namespace BasicEnemy
                     else counter = 0.0f;
 
                     if (counter > origin.detectTime) parentLayer.ChangeState("Detected");
+                }
+                class Waiting : State<BasicEnemy>
+                {
+                    public Waiting(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent) { }
+                    float counter = 0.0f;
+                    public override void OnStateEnter()
+                    {
+                        base.OnStateEnter();
+                        counter = 0.0f;
+                    }
+                    public override void OnStateUpdate()
+                    {
+                        base.OnStateUpdate();
+                        counter += Time.deltaTime;
+                        if (counter > origin.roamingCooldown) parentLayer.ChangeState("Roaming");
+                    }
+                }
+                class Roaming : State<BasicEnemy>
+                {
+                    public Roaming(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent)
+                    {
+                    }
                 }
             }
             class Detected : Layer<BasicEnemy>
@@ -91,6 +126,11 @@ namespace BasicEnemy
                     AddState("Attacking", new Attacking(origin, this));
                 }
                 float counter = 0.0f;
+                public override void OnStateEnter()
+                {
+                    base.OnStateEnter();
+                    origin.agent.enabled = false;
+                }
                 public override void OnStateUpdate()
                 {
                     base.OnStateUpdate();
