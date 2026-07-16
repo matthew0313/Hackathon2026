@@ -616,8 +616,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DestructibleSprite
   maskDownscale: 1
-  cellSize: 4
-  chunkCells: 8
+  chunkTexels: 64
   alphaThreshold: 0.5
   impactRoughness: 0.34
   spallChips: 3
@@ -815,7 +814,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Player
   moveSpeed: 4
   hammer: {fileID: 1465305475}
-  swingTorque: 50
+  followSpeed: 50
+  hammerMoveTime: 0.1
 --- !u!50 &800789230
 Rigidbody2D:
   serializedVersion: 5
@@ -1003,7 +1003,7 @@ Rigidbody2D:
   m_UseAutoMass: 0
   m_Mass: 1
   m_LinearDamping: 0
-  m_AngularDamping: 0.05
+  m_AngularDamping: 0
   m_GravityScale: 0
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -1014,7 +1014,7 @@ Rigidbody2D:
     m_Bits: 0
   m_Interpolate: 0
   m_SleepingMode: 1
-  m_CollisionDetection: 0
+  m_CollisionDetection: 1
   m_Constraints: 0
 --- !u!210 &1465305474
 SortingGroup:

@@ -5,9 +5,9 @@ using UnityEngine;
 /// A sprite that can have holes carved out of it by blunt impacts.
 ///
 /// Damage lives in a per-instance R8 mask texture that the shader multiplies into the
-/// sprite's alpha; the source sprite asset is never touched. Collision is driven by a
-/// separate, much coarser occupancy grid that is greedy-meshed into rectangles, so the
-/// collider rebuild cost is decoupled from the visual resolution.
+/// sprite's alpha; the source sprite asset is never touched. Collision is greedy-meshed
+/// from the same texel grid into axis-aligned rectangles, so the collider matches the
+/// visible art exactly rather than approximating it.
 ///
 /// Carves are applied to the CPU mask immediately but the GPU upload and the collider
 /// rebuild are deferred to <see cref="DestructionScheduler"/>, which batches them to one
@@ -28,11 +28,9 @@ public class DestructibleSprite : MonoBehaviour
     [Tooltip("Sprite pixels per mask texel. 1 = pixel perfect. 2 = half res, a quarter of the memory and carve cost.")]
     [SerializeField, Range(1, 8)] int maskDownscale = 1;
 
-    [Tooltip("Mask texels per collision cell. Higher = blockier collision, much cheaper rebuilds.")]
-    [SerializeField, Range(1, 16)] int cellSize = 4;
-
-    [Tooltip("Collision cells per chunk edge. Each chunk owns one PolygonCollider2D and re-meshes independently.")]
-    [SerializeField, Range(4, 32)] int chunkCells = 16;
+    [Tooltip("Mask texels per chunk edge. Each chunk owns one PolygonCollider2D and re-meshes independently. " +
+             "Smaller = cheaper individual rebuilds, but more colliders on the object.")]
+    [SerializeField, Range(8, 128)] int chunkTexels = 64;
 
     [Header("Shape")]
     [Tooltip("Sprite alpha at or above this counts as solid when deriving the collision shape.")]
@@ -70,19 +68,17 @@ public class DestructibleSprite : MonoBehaviour
 
     // Mask space. 255 = intact, 0 = carved away.
     byte[] mask;
-    // Immutable: was this texel opaque in the source art? Only opaque texels contribute to collision.
-    bool[] opaque;
+    // Does this texel currently collide? True only while it was opaque in the source art AND is
+    // still intact. Collision is meshed straight off this, at texel resolution, so the collider
+    // neither over- nor under-approximates the art: anything visible is collidable and nothing
+    // else is. That exactness is what keeps every last pixel reachable by a physics-driven hit
+    // without hanging phantom collision off the silhouette.
+    bool[] solid;
     int maskW, maskH;
 
-    // Collision grid. A cell collides while it holds at least one intact opaque texel, so collision
-    // over-approximates the art by up to cellSize-1 texels rather than under-approximating it. That
-    // keeps the invariant "anything visible is collidable", which is what makes every last pixel
-    // reachable by a physics-driven hit. Shrink cellSize to tighten the fit.
-    int[] cellSolid;      // count of intact opaque texels per cell
-    int gridW, gridH;
-
-    // Chunks.
+    // Chunks. Each owns one PolygonCollider2D over a chunkTexels-square block of the mask.
     int chunksX, chunksY;
+    int[] chunkSolid;     // count of intact opaque texels per chunk; 0 = collider can go dark
     PolygonCollider2D[] chunkColliders;
     bool[] chunkDirty;
     readonly Queue<int> dirtyChunks = new Queue<int>();
@@ -158,11 +154,13 @@ public class DestructibleSprite : MonoBehaviour
         maskH = Mathf.Max(1, Mathf.CeilToInt((float)srcH / maskDownscale));
 
         mask = new byte[maskW * maskH];
-        opaque = new bool[maskW * maskH];
+        solid = new bool[maskW * maskH];
 
-        gridW = Mathf.CeilToInt((float)maskW / cellSize);
-        gridH = Mathf.CeilToInt((float)maskH / cellSize);
-        cellSolid = new int[gridW * gridH];
+        chunksX = Mathf.CeilToInt((float)maskW / chunkTexels);
+        chunksY = Mathf.CeilToInt((float)maskH / chunkTexels);
+        chunkSolid = new int[chunksX * chunksY];
+        chunkDirty = new bool[chunksX * chunksY];
+        visited = new bool[chunkTexels * chunkTexels];
 
         // Point-sample the source alpha down into mask space and seed the occupancy counts.
         double tr = 0, tg = 0, tb = 0;
@@ -179,8 +177,8 @@ public class DestructibleSprite : MonoBehaviour
                 mask[i] = 255;
                 if (c.a < alphaThreshold) continue;
 
-                opaque[i] = true;
-                cellSolid[(y / cellSize) * gridW + (x / cellSize)]++;
+                solid[i] = true;
+                chunkSolid[ChunkOf(x, y)]++;
                 tr += c.r; tg += c.g; tb += c.b;
                 opaqueCount++;
             }
@@ -224,13 +222,10 @@ public class DestructibleSprite : MonoBehaviour
 
         Vector3 scale = transform.lossyScale;
         worldTexelArea = Mathf.Abs(texelToLocal.x * scale.x) * Mathf.Abs(texelToLocal.y * scale.y);
-
-        chunksX = Mathf.CeilToInt((float)gridW / chunkCells);
-        chunksY = Mathf.CeilToInt((float)gridH / chunkCells);
-        chunkDirty = new bool[chunksX * chunksY];
-        visited = new bool[chunkCells * chunkCells];
         return true;
     }
+
+    int ChunkOf(int x, int y) => (y / chunkTexels) * chunksX + (x / chunkTexels);
 
     void BuildColliders()
     {
@@ -429,17 +424,20 @@ public class DestructibleSprite : MonoBehaviour
 
     float WorldScale => Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.x));
 
-    /// Clears one texel and keeps the cell's occupancy count in step. Returns whether anything changed.
+    /// Clears one texel and keeps the chunk's occupancy count in step. Returns whether anything changed.
     bool RemoveTexel(int i, int x, int y, ref int removed)
     {
         if (mask[i] == 0) return false;
         mask[i] = 0;
-        if (!opaque[i]) return true;
+        // mask was intact, so solid[i] still reflects whether the source art was opaque here.
+        // A transparent texel is a visual-only change: the mask uploads, but collision cannot move.
+        if (!solid[i]) return true;
 
+        solid[i] = false;
         removed++;
-        int c = (y / cellSize) * gridW + (x / cellSize);
-        // Emptying the cell is the only thing that changes the collision shape.
-        if (--cellSolid[c] == 0) MarkChunkDirty(c);
+        int chunk = ChunkOf(x, y);
+        chunkSolid[chunk]--;
+        MarkChunkDirty(chunk);
         return true;
     }
 
@@ -453,9 +451,8 @@ public class DestructibleSprite : MonoBehaviour
         if (removed > 0) EmitDebris(worldPos, removed);
     }
 
-    void MarkChunkDirty(int cellIndex)
+    void MarkChunkDirty(int chunk)
     {
-        int chunk = ((cellIndex / gridW) / chunkCells) * chunksX + ((cellIndex % gridW) / chunkCells);
         if (chunkDirty[chunk]) return;
         chunkDirty[chunk] = true;
         dirtyChunks.Enqueue(chunk);
@@ -496,42 +493,51 @@ public class DestructibleSprite : MonoBehaviour
         RebuildChunk(chunk);
     }
 
-    bool CellSolid(int gx, int gy) => cellSolid[gy * gridW + gx] > 0;
-
     /// <summary>
-    /// Greedy-mesh one chunk's solid cells into maximal rectangles and hand them to that
-    /// chunk's collider as quad paths. Cells are boolean and axis-aligned, so this is both
-    /// cheaper and far less fiddly than contour tracing plus simplification.
+    /// Greedy-mesh one chunk's solid texels into maximal rectangles and hand them to that
+    /// chunk's collider as quad paths. Texels are boolean and axis-aligned, so this is both
+    /// cheaper and far less fiddly than contour tracing plus simplification -- and because it
+    /// runs at texel resolution, the result is the art's exact silhouette.
     /// </summary>
     void RebuildChunk(int chunk)
     {
+        var col = chunkColliders[chunk];
+        if (chunkSolid[chunk] == 0)
+        {
+            col.pathCount = 0;
+            col.enabled = false;
+            return;
+        }
+
         int chx = chunk % chunksX;
         int chy = chunk / chunksX;
-        int cx0 = chx * chunkCells;
-        int cy0 = chy * chunkCells;
-        int w = Mathf.Min(cx0 + chunkCells, gridW) - cx0;
-        int h = Mathf.Min(cy0 + chunkCells, gridH) - cy0;
+        int tx0 = chx * chunkTexels;
+        int ty0 = chy * chunkTexels;
+        int w = Mathf.Min(tx0 + chunkTexels, maskW) - tx0;
+        int h = Mathf.Min(ty0 + chunkTexels, maskH) - ty0;
 
         System.Array.Clear(visited, 0, visited.Length);
         rects.Clear();
 
         for (int y = 0; y < h; y++)
         {
+            int row = (ty0 + y) * maskW + tx0;
             for (int x = 0; x < w; x++)
             {
-                if (visited[y * chunkCells + x] || !CellSolid(cx0 + x, cy0 + y)) continue;
+                if (visited[y * chunkTexels + x] || !solid[row + x]) continue;
 
                 int rw = 1;
-                while (x + rw < w && !visited[y * chunkCells + x + rw] && CellSolid(cx0 + x + rw, cy0 + y))
+                while (x + rw < w && !visited[y * chunkTexels + x + rw] && solid[row + x + rw])
                     rw++;
 
                 int rh = 1;
                 while (y + rh < h)
                 {
+                    int next = (ty0 + y + rh) * maskW + tx0;
                     bool rowFits = true;
                     for (int k = 0; k < rw; k++)
                     {
-                        if (!visited[(y + rh) * chunkCells + x + k] && CellSolid(cx0 + x + k, cy0 + y + rh)) continue;
+                        if (!visited[(y + rh) * chunkTexels + x + k] && solid[next + x + k]) continue;
                         rowFits = false;
                         break;
                     }
@@ -541,19 +547,18 @@ public class DestructibleSprite : MonoBehaviour
 
                 for (int yy = 0; yy < rh; yy++)
                     for (int xx = 0; xx < rw; xx++)
-                        visited[(y + yy) * chunkCells + x + xx] = true;
+                        visited[(y + yy) * chunkTexels + x + xx] = true;
 
-                rects.Add(new RectInt(cx0 + x, cy0 + y, rw, rh));
+                rects.Add(new RectInt(tx0 + x, ty0 + y, rw, rh));
             }
         }
 
-        var col = chunkColliders[chunk];
         col.pathCount = rects.Count;
         for (int i = 0; i < rects.Count; i++)
         {
             RectInt r = rects[i];
-            Vector2 min = CellCornerToLocal(r.xMin, r.yMin);
-            Vector2 max = CellCornerToLocal(r.xMax, r.yMax);
+            Vector2 min = TexelCornerToLocal(r.xMin, r.yMin);
+            Vector2 max = TexelCornerToLocal(r.xMax, r.yMax);
 
             // Unity's PolygonCollider2D triangulation is not robust when two paths on the same
             // collider share a collinear edge: it can silently eat a sliver off one of them, leaving
@@ -573,14 +578,9 @@ public class DestructibleSprite : MonoBehaviour
             pathBuffer.Add(new Vector2(min.x, max.y));
             col.SetPath(i, pathBuffer);
         }
-        col.enabled = rects.Count > 0;
+        col.enabled = true;   // chunkSolid > 0, so the mesh above always yields at least one rect
     }
 
-    Vector2 CellCornerToLocal(int gx, int gy)
-    {
-        // The last cell on each axis may be partial, so clamp to the real mask extent.
-        int tx = Mathf.Min(gx * cellSize, maskW);
-        int ty = Mathf.Min(gy * cellSize, maskH);
-        return new Vector2(boundsMin.x + tx * texelToLocal.x, boundsMin.y + ty * texelToLocal.y);
-    }
+    Vector2 TexelCornerToLocal(int tx, int ty)
+        => new Vector2(boundsMin.x + tx * texelToLocal.x, boundsMin.y + ty * texelToLocal.y);
 }
