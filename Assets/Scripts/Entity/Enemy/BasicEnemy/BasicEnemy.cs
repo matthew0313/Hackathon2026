@@ -4,10 +4,11 @@ using UnityEngine;
 
 namespace BasicEnemy
 {
-    [RequireComponent(typeof(Rigidbody2D), typeof(BasicEnemy_HpComp))]
+    [RequireComponent(typeof(Rigidbody2D))]
     public class BasicEnemy : Entity
     {
-        [SerializeField] Animator anim;
+        [SerializeField] DestructibleSprite sprite;
+        [SerializeField] float deadPrecentage = 30.0f;
 
         [SerializeField] float detectRange = 10.0f;
         [SerializeField] float detectTime = 1.0f, unDetectTime = 3.0f;
@@ -26,23 +27,25 @@ namespace BasicEnemy
         [SerializeField] string FSMPath;
 
         Rigidbody2D rb;
-        BasicEnemy_HpComp hpComp;
         Player player;
         internal TopLayer topLayer;
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
-            hpComp = GetComponent<BasicEnemy_HpComp>();
-            hpComp.Initialize();
             player = GameObject.FindGameObjectWithTag("Player").GetComponent<Player>();
             topLayer = new(this);
             topLayer.onFSMChange += () => { FSMPath = topLayer.GetFSMPath(); };
             topLayer.OnStateEnter();
         }
+        bool dead = false;
         private void Update()
         {
             topLayer.OnStateUpdate();
             CheckDetection();
+            if(!dead && sprite.intactPercentage < deadPrecentage)
+            {
+                dead = true; topLayer.ChangeState("Dead");
+            }
         }
         private void FixedUpdate()
         {
@@ -167,6 +170,8 @@ namespace BasicEnemy
                 public override void OnStateEnter()
                 {
                     base.OnStateEnter();
+                    origin.sprite.canBreak = false;
+                    origin.sprite.collisionEnabled = false;
                 }
                 public override void OnStateFixedUpdate()
                 {

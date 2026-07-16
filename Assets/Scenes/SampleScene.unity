@@ -628,7 +628,6 @@ GameObject:
   m_Component:
   - component: {fileID: 567252686}
   - component: {fileID: 567252689}
-  - component: {fileID: 567252688}
   - component: {fileID: 567252687}
   m_Layer: 7
   m_Name: BasicEnemy
@@ -667,6 +666,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BasicEnemy.BasicEnemy
   anim: {fileID: 0}
+  sprite: {fileID: 1615094046}
+  deadPrecentage: 70
   detectRange: 10
   detectTime: 1
   unDetectTime: 3
@@ -684,20 +685,6 @@ MonoBehaviour:
   attackEndlag: 0.5
   attackHitbox: {fileID: 942045042}
   FSMPath: 
---- !u!114 &567252688
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 567252685}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a64bec7ab8517e04886f0fe3e6f707a5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BasicEnemy.BasicEnemy_HpComp
-  m_maxHp: 100
-  m_hp: 100
 --- !u!50 &567252689
 Rigidbody2D:
   serializedVersion: 5
@@ -829,6 +816,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c5861af78a84414b8ad587b5cc202b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DestructibleSprite
+  canBreak: 1
+  collision: 1
   chunkTexels: 64
   alphaThreshold: 0.5
   impactRoughness: 0.34
@@ -1386,6 +1375,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c5861af78a84414b8ad587b5cc202b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DestructibleSprite
+  canBreak: 1
+  collision: 1
   chunkTexels: 64
   alphaThreshold: 0.5
   impactRoughness: 0.34
