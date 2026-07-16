@@ -18,9 +18,9 @@ namespace BasicEnemy
         [SerializeField] float detectTime = 1.0f, unDetectTime = 3.0f;
         [SerializeField] LayerMask detectionBlockMask;
 
+        [SerializeField] float roamingSpeed = 3.0f;
         [SerializeField] float roamingCooldown = 5.0f;
         [SerializeField] float roamingRadius = 5.0f;
-        [SerializeField] float roamingSpeed = 2.0f;
         [SerializeField] float roamingArriveDist = 0.2f;
 
         [SerializeField] float chaseDist = 1.5f;
@@ -28,10 +28,12 @@ namespace BasicEnemy
 
         [SerializeField] float rotateRate = 10.0f;
         [SerializeField] float chaseSpeed = 5.0f, backstepSpeed = 3.0f;
+        [SerializeField] float attackCooldown = 3.0f;
         [SerializeField] float attackDamage = 10.0f;
         [SerializeField] float attackRange = 2.0f;
         [SerializeField] float attackWindup = 0.5f, attackEndlag = 0.5f;
         [SerializeField] SquareHitbox2D attackHitbox;
+        [SerializeField] PooledEffect attackEffect;
 
         [SerializeField] float deadFadeTime = 2.0f;
 
@@ -70,6 +72,7 @@ namespace BasicEnemy
             return !Physics2D.Raycast(transform.position, dir.normalized, dir.magnitude, detectionBlockMask);
         }
         public event Action onDeath;
+        float lastAttackTime = -9999.0f;
         internal class TopLayer : TopLayer<BasicEnemy>
         {
             public TopLayer(BasicEnemy origin) : base(origin)
@@ -136,7 +139,13 @@ namespace BasicEnemy
                     public override void OnStateEnter()
                     {
                         base.OnStateEnter();
-                        origin.agent.enabled = true;
+                        origin.agent.isStopped = false;
+                        origin.agent.stoppingDistance = origin.roamingArriveDist;
+                        origin.agent.speed = origin.roamingSpeed;
+                        if (!origin.agent.isOnNavMesh)
+                        {
+                            parentLayer.ChangeState("Waiting"); return;
+                        }
                         for (int i = 0; i < 20; i++)
                         {
                             Vector2 candidate = origin.rb.position + UnityEngine.Random.insideUnitCircle * origin.roamingRadius;
@@ -149,12 +158,12 @@ namespace BasicEnemy
                     public override void OnStateUpdate()
                     {
                         base.OnStateUpdate();
-                        if (origin.agent.remainingDistance <= origin.roamingArriveDist) parentLayer.ChangeState("Waiting");
+                        if (origin.agent.remainingDistance <= origin.roamingArriveDist + 0.01f) parentLayer.ChangeState("Waiting");
                     }
                     public override void OnStateExit()
                     {
                         base.OnStateExit();
-                        origin.agent.enabled = false;
+                        origin.agent.isStopped = true;
                     }
                 }
             }
@@ -183,20 +192,27 @@ namespace BasicEnemy
                 class Chasing : State<BasicEnemy>
                 {
                     public Chasing(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent) { }
-                    public override void OnStateFixedUpdate()
-                    {
-                        base.OnStateFixedUpdate();
-                        Vector2 dir = origin.player.transform.position - origin.transform.position;
-                        origin.rb.linearVelocity = dir.magnitude > origin.chaseDist ? 
-                            dir.normalized * origin.chaseSpeed : dir.magnitude < origin.backstepDist ? 
-                            dir.normalized * -origin.backstepSpeed : Vector2.zero;
-                    }
                     public override void OnStateUpdate()
                     {
                         base.OnStateUpdate();
-                        Vector2 dir = origin.player.transform.position - origin.transform.position; dir.Normalize();
+                        
+                        if(origin.agent.isOnNavMesh) origin.agent.SetDestination(origin.player.transform.position);
+                        Vector2 dir = origin.player.transform.position - origin.transform.position;
+                        if(dir.magnitude > origin.chaseDist)
+                        {
+                            origin.agent.isStopped = false;
+                            origin.agent.SetDestination(origin.player.transform.position);
+                        }
+                        else
+                        {
+                            origin.agent.isStopped = true;
+                            if(dir.magnitude < origin.backstepDist)
+                            {
+                                origin.agent.Move(dir.normalized * -origin.backstepSpeed * Time.deltaTime);
+                            }
+                        }
                         origin.transform.rotation = Quaternion.Slerp(origin.transform.rotation, Quaternion.Euler(0, 0, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg), origin.rotateRate * Time.deltaTime);
-                        if (Vector2.Distance(origin.transform.position, origin.player.transform.position) < origin.attackRange)
+                        if (Time.time - origin.lastAttackTime > origin.attackCooldown && Vector2.Distance(origin.transform.position, origin.player.transform.position) < origin.attackRange)
                         {
                             parentLayer.ChangeState("Attacking");
                         }
@@ -204,7 +220,7 @@ namespace BasicEnemy
                     public override void OnStateExit()
                     {
                         base.OnStateExit();
-                        origin.rb.linearVelocity = Vector2.zero;
+                        origin.agent.isStopped = true;
                     }
                 }
                 class Attacking : State<BasicEnemy>
@@ -215,11 +231,15 @@ namespace BasicEnemy
                     public override void OnStateEnter()
                     {
                         base.OnStateEnter();
+                        origin.lastAttackTime = Time.time;
+                        Vector2 dir = origin.player.transform.position - origin.transform.position;
+                        origin.transform.right = dir.normalized;
                         attack = Timing.RunCoroutine(Attack());
                     }
                     IEnumerator<float> Attack()
                     {
                         yield return Timing.WaitForSeconds(origin.attackWindup);
+                        origin.attackEffect.Get(origin.attackHitbox.transform.position, origin.attackHitbox.transform.rotation);
                         hitList.Clear();
                         foreach (var i in origin.attackHitbox.Scan())
                         {
@@ -263,6 +283,7 @@ namespace BasicEnemy
                     counter = Mathf.Min(origin.deadFadeTime, counter + Time.deltaTime);
                     Color tmp = origin.spriteRenderer.color;
                     tmp.a = 1.0f - counter / origin.deadFadeTime;
+                    origin.spriteRenderer.color = tmp;
                     if(counter >= origin.deadFadeTime)
                     {
                         origin.onDeath?.Invoke();

@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 54459763787054918}
   m_Layer: 7
   m_Name: Sprite
-  m_TagString: Untagged
+  m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -28,7 +28,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.5, y: 1.5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 4957950621126194052}
@@ -132,7 +132,7 @@ GameObject:
   - component: {fileID: 3647664237802712229}
   m_Layer: 7
   m_Name: BasicEnemy
-  m_TagString: Enemy
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -203,20 +203,22 @@ MonoBehaviour:
   detectionBlockMask:
     serializedVersion: 2
     m_Bits: 8
+  roamingSpeed: 2
   roamingCooldown: 5
   roamingRadius: 5
-  roamingSpeed: 2
   roamingArriveDist: 0.2
   chaseDist: 2
   backstepDist: 1
   rotateRate: 10
   chaseSpeed: 5
   backstepSpeed: 3
+  attackCooldown: 3
   attackDamage: 10
   attackRange: 3
   attackWindup: 0.5
   attackEndlag: 0.5
   attackHitbox: {fileID: 1604570018306280461}
+  attackEffect: {fileID: 5259641601492158340, guid: 1890b06696fbb9b4eaa91b64f37c9cbf, type: 3}
   deadFadeTime: 2
 --- !u!195 &3647664237802712229
 NavMeshAgent:
@@ -266,8 +268,8 @@ Transform:
   m_GameObject: {fileID: 6860620000521409137}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 1.5, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1.5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 4957950621126194052}
