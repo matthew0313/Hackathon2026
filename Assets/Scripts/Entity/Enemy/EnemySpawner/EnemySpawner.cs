@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BasicEnemy;
 public class EnemySpawner : Enemy
 {
+    [SerializeField] SpriteRenderer spriteRenderer;
     [SerializeField] DestructibleSprite sprite;
     [SerializeField] float deadPercentage = 30.0f;
     [SerializeField] float spawnRateMax = 30.0f, spawnRateMin = 10.0f;
@@ -10,6 +11,7 @@ public class EnemySpawner : Enemy
     [SerializeField] Transform spawnPoint;
     [SerializeField] BasicEnemy.BasicEnemy enemyPrefab;
     [SerializeField] int maxEnemies = 10;
+    [SerializeField] float deadFadeTime = 3.0f;
     Player player;
     TopLayer topLayer;
     private void Awake()
@@ -67,6 +69,26 @@ public class EnemySpawner : Enemy
         class Dead : State<EnemySpawner>
         {
             public Dead(EnemySpawner origin, Layer<EnemySpawner> parent) : base(origin, parent) { }
+            float counter = 0.0f;
+            public override void OnStateEnter()
+            {
+                base.OnStateEnter();
+                counter = 0.0f;
+                origin.sprite.canBreak = false;
+                origin.sprite.collisionEnabled = false;
+            }
+            public override void OnStateUpdate()
+            {
+                base.OnStateUpdate();
+                counter = Mathf.Min(origin.deadFadeTime, counter + Time.deltaTime);
+                Color tmp = origin.spriteRenderer.color;
+                tmp.a = 1.0f - counter / origin.deadFadeTime;
+                origin.spriteRenderer.color = tmp;
+                if (counter >= origin.deadFadeTime)
+                {
+                    Destroy(origin.gameObject);
+                }
+            }
         }
     }
 }

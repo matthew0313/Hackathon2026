@@ -40,6 +40,7 @@ namespace BasicEnemy
         Rigidbody2D rb;
         Player player;
         internal TopLayer topLayer;
+        readonly int fullHp = Animator.StringToHash("FullHp");
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
@@ -71,7 +72,6 @@ namespace BasicEnemy
             Vector2 dir = player.transform.position - transform.position;
             return !Physics2D.Raycast(transform.position, dir.normalized, dir.magnitude, detectionBlockMask);
         }
-        public event Action onDeath;
         float lastAttackTime = -9999.0f;
         internal class TopLayer : TopLayer<BasicEnemy>
         {
@@ -286,7 +286,6 @@ namespace BasicEnemy
                     origin.spriteRenderer.color = tmp;
                     if(counter >= origin.deadFadeTime)
                     {
-                        origin.onDeath?.Invoke();
                         Destroy(origin.gameObject);
                     }
                 }
