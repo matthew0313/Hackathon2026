@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -282,6 +283,8 @@ public abstract class DestructibleSurface : MonoBehaviour
         FinishCarve(worldPos, ref tally);
     }
 
+    public event Action onHammerBlow;
+
     /// <summary>
     /// Carve the crater left by a hammer blow.
     ///
@@ -524,7 +527,15 @@ public abstract class DestructibleSurface : MonoBehaviour
         int chunk = ChunkOf(x, y);
         chunkSolid[chunk]--;
         MarkChunkDirty(chunk);
+        OnSolidTexelCarved(x, y);
     }
+
+    /// <summary>
+    /// Called once for each collidable texel carved away, after all counts have updated.
+    /// Lets subclasses keep per-region bookkeeping of their own -- the tilemap uses it to
+    /// notice when a whole tile's material is gone and retire it from navigation.
+    /// </summary>
+    protected virtual void OnSolidTexelCarved(int x, int y) { }
 
     void FinishCarve(Vector3 worldPos, ref CarveTally tally)
     {

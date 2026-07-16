@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using NavMeshPlus.Components;
+using NavMeshPlus.Extensions;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.Tilemaps;
 
 /// <summary>
@@ -20,6 +23,12 @@ using UnityEngine.Tilemaps;
 /// stretched over its whole cell, and no per-tile transforms (flips/rotations are ignored when
 /// rasterising). Tiles painted or erased at runtime are not picked up -- the shape is derived
 /// once at startup.
+///
+/// Navigation: NavMeshPlus bakes this tilemap's cells as per-tile sources, which know nothing
+/// about the damage mask. So when every solid texel of a cell has been carved away, the tile
+/// itself is removed (invisible anyway -- the mask hides it) and the navmesh is recalculated
+/// asynchronously, only inside the broken tiles' neighbourhood, so blowing a hole through a
+/// wall opens it to agents at a cost that scales with the hole, not the map.
 /// </summary>
 [RequireComponent(typeof(Tilemap), typeof(TilemapRenderer))]
 public class DestructibleTilemap : DestructibleSurface
@@ -28,6 +37,27 @@ public class DestructibleTilemap : DestructibleSurface
     [Tooltip("Mask texels per cell edge. Higher = finer damage and collision, at more memory and " +
              "carve cost. Match the tile art's pixels per cell for pixel-perfect damage.")]
     [SerializeField, Range(4, 64)] int texelsPerCell = 16;
+
+    [Header("NavMesh")]
+    [Tooltip("Surface to patch when fully-broken tiles open new paths. Empty = first active surface.")]
+    [SerializeField] NavMeshSurface navMeshSurface;
+    [Tooltip("Seconds after the last tile breaks before the navmesh around it recalculates, " +
+             "so a burst of blows costs one rebake instead of one per hit.")]
+    [SerializeField] float navMeshDebounce = 0.3f;
+    [Tooltip("World-space padding around broken tiles when recalculating. Keep it above the " +
+             "agent radius or edges at the patch seam can bake wrong.")]
+    [SerializeField] float navMeshPadding = 1f;
+
+    Tilemap tilemap;
+    Vector3Int cellsMin;
+    int cellsX;
+    int[] cellSolid;   // remaining solid texels per cell; reaching 0 retires the tile
+    readonly List<Vector3Int> brokenCells = new List<Vector3Int>();
+
+    Bounds navDirty;
+    bool navDirtyValid;
+    float navDirtyTime;
+    AsyncOperation navMeshOp;
 
     /// One tile sprite's solidity at cell resolution, plus its colour sums for the debris tint.
     /// Cached per sprite because a tilemap repeats the same few sprites hundreds of times.
@@ -40,7 +70,7 @@ public class DestructibleTilemap : DestructibleSurface
 
     protected override bool BuildShape()
     {
-        var tilemap = GetComponent<Tilemap>();
+        tilemap = GetComponent<Tilemap>();
         tilemap.CompressBounds();
         BoundsInt cells = tilemap.cellBounds;
         if (cells.size.x <= 0 || cells.size.y <= 0)
@@ -63,6 +93,10 @@ public class DestructibleTilemap : DestructibleSurface
         InitMask(
             cells.size.x * texelsPerCell, cells.size.y * texelsPerCell,
             origin, cellSize / texelsPerCell);
+
+        cellsMin = cells.min;
+        cellsX = cells.size.x;
+        cellSolid = new int[cells.size.x * cells.size.y];
 
         var stamps = new Dictionary<Sprite, Stamp>();
         double tr = 0, tg = 0, tb = 0;
@@ -92,6 +126,7 @@ public class DestructibleTilemap : DestructibleSurface
                         if (stamp.solid[ty * texelsPerCell + tx])
                             MarkSolid(x0 + tx, y0 + ty);
 
+                cellSolid[cy * cellsX + cx] = stamp.count;
                 tr += stamp.r; tg += stamp.g; tb += stamp.b;
                 opaqueCount += stamp.count;
             }
@@ -114,6 +149,109 @@ public class DestructibleTilemap : DestructibleSurface
 
         FinishShape(GetComponent<TilemapRenderer>(), maskRect);
         return true;
+    }
+
+    /// Tracks each cell's surviving material; the moment a cell's last solid texel goes, the
+    /// tile is queued for retirement. A cell can only hit zero once, so no dedup is needed.
+    protected override void OnSolidTexelCarved(int x, int y)
+    {
+        int cx = x / texelsPerCell;
+        int cy = y / texelsPerCell;
+        if (--cellSolid[cy * cellsX + cx] > 0) return;
+        brokenCells.Add(new Vector3Int(cellsMin.x + cx, cellsMin.y + cy, cellsMin.z));
+    }
+
+    void LateUpdate()
+    {
+        if (brokenCells.Count > 0)
+        {
+            // Retiring the tile changes nothing visibly (its texels are all mask-hidden) or
+            // physically (collision is ours, not the TilemapCollider2D's) -- it only stops the
+            // cell being collected as a navmesh source on the next rebake.
+            Vector3 cellWorldSize = Vector3.Scale(tilemap.layoutGrid.cellSize, transform.lossyScale);
+            for (int i = 0; i < brokenCells.Count; i++)
+            {
+                tilemap.SetTile(brokenCells[i], null);
+                var cellBounds = new Bounds(tilemap.GetCellCenterWorld(brokenCells[i]), cellWorldSize);
+                if (navDirtyValid) navDirty.Encapsulate(cellBounds);
+                else { navDirty = cellBounds; navDirtyValid = true; }
+            }
+            brokenCells.Clear();
+            navDirtyTime = Time.time;
+        }
+
+        if (!navDirtyValid || Time.time - navDirtyTime < navMeshDebounce) return;
+        if (navMeshOp != null && !navMeshOp.isDone) return;   // rebake again once the running one lands
+
+        NavMeshSurface surface = navMeshSurface;
+        if (surface == null && NavMeshSurface.activeSurfaces.Count > 0) surface = NavMeshSurface.activeSurfaces[0];
+        if (surface == null || surface.navMeshData == null) { navDirtyValid = false; return; }
+
+        Bounds dirty = navDirty;
+        dirty.Expand(navMeshPadding * 2f);
+        navDirtyValid = false;
+        navMeshOp = UpdateNavMeshPartial(surface, dirty);
+    }
+
+    /// <summary>
+    /// Rebuild only the navmesh tiles intersecting <paramref name="dirtyWorldBounds"/>.
+    ///
+    /// Mirrors the runtime source collection of NavMeshSurface.UpdateNavMesh (which is where the
+    /// CollectSources2d extension rasterises tilemaps and sprites), but where the surface always
+    /// hands UpdateNavMeshDataAsync the whole world's bounds, this passes just the dirty region,
+    /// so the expensive voxelise-and-triangulate step runs only near the damage.
+    /// </summary>
+    AsyncOperation UpdateNavMeshPartial(NavMeshSurface surface, Bounds dirtyWorldBounds)
+    {
+        using var state = new NavMeshBuilderState();
+        var sources = new List<NavMeshBuildSource>();
+        var markups = new List<NavMeshBuildMarkup>();
+
+        foreach (var m in NavMeshModifier.activeModifiers)
+        {
+            if ((surface.layerMask & (1 << m.gameObject.layer)) == 0) continue;
+            if (!m.AffectsAgentType(surface.agentTypeID)) continue;
+            markups.Add(new NavMeshBuildMarkup
+            {
+                root = m.transform,
+                overrideArea = m.overrideArea,
+                area = m.area,
+                ignoreFromBuild = m.ignoreFromBuild,
+            });
+        }
+
+        NavMeshBuilder.CollectSources(null, surface.layerMask, surface.useGeometry, surface.defaultArea, markups, sources);
+        for (int i = 0; i < surface.NavMeshExtensions.Count; i++)
+            surface.NavMeshExtensions[i].CollectSources(surface, sources, state);
+
+        if (surface.ignoreNavMeshAgent)
+            sources.RemoveAll(x => x.component != null && x.component.gameObject.GetComponent<NavMeshAgent>() != null);
+        if (surface.ignoreNavMeshObstacle)
+            sources.RemoveAll(x => x.component != null && x.component.gameObject.GetComponent<NavMeshObstacle>() != null);
+
+        foreach (var m in NavMeshModifierVolume.activeModifiers)
+        {
+            if ((surface.layerMask & (1 << m.gameObject.layer)) == 0) continue;
+            if (!m.AffectsAgentType(surface.agentTypeID)) continue;
+            Vector3 scale = m.transform.lossyScale;
+            sources.Add(new NavMeshBuildSource
+            {
+                shape = NavMeshBuildSourceShape.ModifierBox,
+                transform = Matrix4x4.TRS(m.transform.TransformPoint(m.center), m.transform.rotation, Vector3.one),
+                size = new Vector3(m.size.x * Mathf.Abs(scale.x), m.size.y * Mathf.Abs(scale.y), m.size.z * Mathf.Abs(scale.z)),
+                area = m.area,
+            });
+        }
+
+        state.worldBounds = surface.CalculateWorldBounds(sources);
+        for (int i = 0; i < surface.NavMeshExtensions.Count; i++)
+            surface.NavMeshExtensions[i].PostCollectSources(surface, sources, state);
+
+        // The navmesh data lives in the surface's frame (2D surfaces are rotated to lie in XY),
+        // so the dirty region must be expressed there too.
+        Matrix4x4 worldToLocal = Matrix4x4.TRS(surface.transform.position, surface.transform.rotation, Vector3.one).inverse;
+        Bounds localDirty = NavMeshSurface.GetWorldBounds(worldToLocal, dirtyWorldBounds);
+        return NavMeshBuilder.UpdateNavMeshDataAsync(surface.navMeshData, surface.GetBuildSettings(), sources, localDirty);
     }
 
     /// Point-samples one tile sprite's texture rect down to a cell's worth of mask texels.

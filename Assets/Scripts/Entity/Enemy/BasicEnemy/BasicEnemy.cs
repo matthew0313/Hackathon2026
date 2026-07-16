@@ -1,4 +1,5 @@
 using MEC;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
@@ -8,6 +9,7 @@ namespace BasicEnemy
     [RequireComponent(typeof(Rigidbody2D))]
     public class BasicEnemy : Entity
     {
+        [SerializeField] SpriteRenderer spriteRenderer;
         [SerializeField] DestructibleSprite sprite;
         [SerializeField] NavMeshAgent agent;
         [SerializeField] float deadPrecentage = 30.0f;
@@ -17,6 +19,9 @@ namespace BasicEnemy
         [SerializeField] LayerMask detectionBlockMask;
 
         [SerializeField] float roamingCooldown = 5.0f;
+        [SerializeField] float roamingRadius = 5.0f;
+        [SerializeField] float roamingSpeed = 2.0f;
+        [SerializeField] float roamingArriveDist = 0.2f;
 
         [SerializeField] float chaseDist = 1.5f;
         [SerializeField] float backstepDist = 1.0f;
@@ -28,7 +33,7 @@ namespace BasicEnemy
         [SerializeField] float attackWindup = 0.5f, attackEndlag = 0.5f;
         [SerializeField] SquareHitbox2D attackHitbox;
 
-        [SerializeField] string FSMPath;
+        [SerializeField] float deadFadeTime = 2.0f;
 
         Rigidbody2D rb;
         Player player;
@@ -36,9 +41,9 @@ namespace BasicEnemy
         private void Awake()
         {
             rb = GetComponent<Rigidbody2D>();
+            agent.updateUpAxis = false;
             player = GameObject.FindGameObjectWithTag("Player").GetComponent<Player>();
             topLayer = new(this);
-            topLayer.onFSMChange += () => { FSMPath = topLayer.GetFSMPath(); };
             topLayer.OnStateEnter();
         }
         bool dead = false;
@@ -64,6 +69,7 @@ namespace BasicEnemy
             Vector2 dir = player.transform.position - transform.position;
             return !Physics2D.Raycast(transform.position, dir.normalized, dir.magnitude, detectionBlockMask);
         }
+        public event Action onDeath;
         internal class TopLayer : TopLayer<BasicEnemy>
         {
             public TopLayer(BasicEnemy origin) : base(origin)
@@ -79,13 +85,22 @@ namespace BasicEnemy
                 {
                     defaultState = new Waiting(origin, this);
                     AddState("Waiting", defaultState);
+                    AddState("Roaming", new Roaming(origin, this));
                 }
                 float counter = 0.0f;
                 public override void OnStateEnter()
                 {
                     base.OnStateEnter();
                     origin.agent.enabled = true;
+                    origin.rb.linearVelocity = Vector2.zero;
+                    origin.sprite.onHammerBlow += OnHammerBlow;
                 }
+
+                private void OnHammerBlow()
+                {
+                    parentLayer.ChangeState("Detected");
+                }
+
                 public override void OnStateUpdate()
                 {
                     base.OnStateUpdate();
@@ -93,6 +108,11 @@ namespace BasicEnemy
                     else counter = 0.0f;
 
                     if (counter > origin.detectTime) parentLayer.ChangeState("Detected");
+                }
+                public override void OnStateExit()
+                {
+                    base.OnStateExit();
+                    origin.sprite.onHammerBlow -= OnHammerBlow;
                 }
                 class Waiting : State<BasicEnemy>
                 {
@@ -112,8 +132,29 @@ namespace BasicEnemy
                 }
                 class Roaming : State<BasicEnemy>
                 {
-                    public Roaming(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent)
+                    public Roaming(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent) { }
+                    public override void OnStateEnter()
                     {
+                        base.OnStateEnter();
+                        origin.agent.enabled = true;
+                        for (int i = 0; i < 20; i++)
+                        {
+                            Vector2 candidate = origin.rb.position + UnityEngine.Random.insideUnitCircle * origin.roamingRadius;
+                            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, origin.roamingRadius * 0.5f, NavMesh.AllAreas)) continue;
+                            origin.agent.SetDestination(candidate);
+                            return;
+                        }
+                        parentLayer.ChangeState("Waiting");
+                    }
+                    public override void OnStateUpdate()
+                    {
+                        base.OnStateUpdate();
+                        if (origin.agent.remainingDistance <= origin.roamingArriveDist) parentLayer.ChangeState("Waiting");
+                    }
+                    public override void OnStateExit()
+                    {
+                        base.OnStateExit();
+                        origin.agent.enabled = false;
                     }
                 }
             }
@@ -207,16 +248,26 @@ namespace BasicEnemy
             class Dead : State<BasicEnemy>
             {
                 public Dead(BasicEnemy origin, Layer<BasicEnemy> parent) : base(origin, parent) { }
+                float counter = 0.0f;
                 public override void OnStateEnter()
                 {
                     base.OnStateEnter();
+                    counter = 0.0f;
                     origin.sprite.canBreak = false;
                     origin.sprite.collisionEnabled = false;
+                    origin.rb.simulated = false;
                 }
-                public override void OnStateFixedUpdate()
+                public override void OnStateUpdate()
                 {
-                    base.OnStateFixedUpdate();
-                    origin.rb.linearVelocity = Vector2.zero;
+                    base.OnStateUpdate();
+                    counter = Mathf.Min(origin.deadFadeTime, counter + Time.deltaTime);
+                    Color tmp = origin.spriteRenderer.color;
+                    tmp.a = 1.0f - counter / origin.deadFadeTime;
+                    if(counter >= origin.deadFadeTime)
+                    {
+                        origin.onDeath?.Invoke();
+                        Destroy(origin.gameObject);
+                    }
                 }
             }
         }

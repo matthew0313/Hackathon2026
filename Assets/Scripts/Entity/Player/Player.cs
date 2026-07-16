@@ -7,6 +7,7 @@ public class Player : Entity
     Camera mainCam;
     [SerializeField] float moveSpeed = 4f;
     [SerializeField] Hammer hammer;
+    [SerializeField] Transform rotator;
     [Tooltip("How hard the head chases the cursor. Its reciprocal is roughly the seconds it takes to " +
              "close most of the gap, so 10 = about a tenth of a second when nothing is in the way.")]
     [SerializeField] float followSpeed = 10.0f;
@@ -36,6 +37,7 @@ public class Player : Entity
     private void Move()
     {
         rb.linearVelocity = InputManager.Instance.MoveInput() * moveSpeed;
+        rotator.right = InputManager.Instance.AimInput(transform.position);
     }
     void UpdateHammer()
     {
