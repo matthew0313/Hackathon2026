@@ -45,13 +45,6 @@ public class Player : Entity
         float targetAngle = Mathf.Atan2(targetDir.y, targetDir.x) * Mathf.Rad2Deg;
         float angleDiff = Mathf.DeltaAngle(Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg, targetAngle);
 
-        // A fresh blow's bounce-back owns the body for a moment (see Hammer.Bounce); chasing the
-        // cursor again immediately would overwrite the recoil before it is ever seen.
-        while(Time.time - hammer.lastBounceTime < recoilTime)
-        {
-            Mouse.current.WarpCursorPosition(mainCam.WorldToScreenPoint(hammer.transform.position + hammer.transform.up * 5.0f));
-            return;
-        }
 
         float omega = angleDiff * followSpeed;
         //if (stamina < staminaLowerThreshold) omega *= Mathf.Lerp(1.0f, 0.0f, (staminaLowerThreshold - stamina) / staminaLowerThreshold);

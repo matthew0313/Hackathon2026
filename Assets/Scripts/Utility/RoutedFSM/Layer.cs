@@ -52,8 +52,8 @@ public abstract class Layer<T> : State<T>
     }
     public override void OnStateEnter()
     {
-        base.OnStateEnter();
         if (currentState == null) currentState = defaultState;
+        base.OnStateEnter();
         currentState.OnStateEnter();
     }
     public override void OnStateExit()

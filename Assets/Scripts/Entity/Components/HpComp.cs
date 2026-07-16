@@ -15,6 +15,10 @@ public abstract class HpComp : MonoBehaviour, IDamagable
         get => m_hp;
         protected set { m_hp = value; onHpChange?.Invoke(); }
     }
+    public virtual void Initialize()
+    {
+        hp = maxHp;
+    }
 
     public event Action onHpChange, onDeath;
     public event Action<DamageReceivedInfo> onDamageReceive;
