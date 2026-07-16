@@ -818,6 +818,7 @@ MonoBehaviour:
   moveSpeed: 4
   hammer: {fileID: 1465305475}
   followSpeed: 10
+  recoilTime: 0.3
 --- !u!50 &800789230
 Rigidbody2D:
   serializedVersion: 5
@@ -1044,12 +1045,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Hammer
   hammerHead: {fileID: 365332437}
-  minImpulse: 0.5
+  minImpulse: 3
   maxImpulse: 6
   minDepth: 0.02
   maxDepth: 0.5
   bounciness: 0.35
-  recoilTime: 0.5
 --- !u!233 &1465305476
 HingeJoint2D:
   m_ObjectHideFlags: 0
